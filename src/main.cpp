@@ -2,7 +2,10 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <INA226.h>
+#include <WebServer.h>
+#include <WiFi.h>
 #include <Wire.h>
+#include "wifi_config.h"
 
 namespace {
 constexpr unsigned long kSerialBaudRate = 115200;
@@ -17,6 +20,7 @@ constexpr int kDisplayPowerPin = 47;
 constexpr unsigned long kDisplayPowerCycleOffMs = 100;
 constexpr unsigned long kDisplayPowerStabilizeMs = 1000;
 constexpr unsigned long kBootSplashDurationMs = 2000;
+constexpr unsigned long kWifiReconnectIntervalMs = 10000;
 constexpr int kBatterySensePin = 9;
 constexpr float kBatteryDividerUpperOhms = 1000000.0f;
 constexpr float kBatteryDividerLowerOhms = 1300000.0f;
@@ -39,12 +43,17 @@ struct Ina226Sample {
 
 Adafruit_SSD1306 display(kDisplayWidth, kDisplayHeight, &Wire, kDisplayResetPin);
 INA226 ina226(kIna226Address, &Wire);
+WebServer server(80);
 bool displayReady = false;
 bool ina226Ready = false;
 bool hasIna226Sample = false;
+bool httpServerStarted = false;
+bool hasLatestMeasurement = false;
 unsigned long lastIna226PollMs = 0;
+unsigned long lastWifiConnectAttemptMs = 0;
 size_t readoutSpinnerIndex = 0;
 float lastBatteryVoltageV = 0.0f;
+Ina226Sample latestIna226Sample = {};
 Ina226Sample previousIna226Sample = {};
 double accumulatedChargeMah = 0.0;
 double accumulatedEnergyMwh = 0.0;
@@ -54,6 +63,11 @@ void logBootStep(const char* message) {
   Serial.print(millis());
   Serial.print(" ms] ");
   Serial.println(message);
+}
+
+void updateLatestMeasurement(const Ina226Sample& sample) {
+  latestIna226Sample = sample;
+  hasLatestMeasurement = true;
 }
 
 float readBatteryVoltageV() {
@@ -125,6 +139,78 @@ void logIna226Readings(const Ina226Sample& sample) {
   Serial.print(" mAh, energy=");
   Serial.print(accumulatedEnergyMwh, 6);
   Serial.println(" mWh");
+}
+
+String buildMeasurementResponse() {
+  if (!hasLatestMeasurement) {
+    return "measurements_available=0\n";
+  }
+
+  String response;
+  response.reserve(256);
+  response += "measurements_available=1\n";
+  response += "timestamp_ms=";
+  response += latestIna226Sample.timestampMs;
+  response += "\n";
+  response += "bus_voltage_v=";
+  response += String(latestIna226Sample.busVoltageV, 3);
+  response += "\n";
+  response += "shunt_voltage_mv=";
+  response += String(latestIna226Sample.shuntVoltageMv, 3);
+  response += "\n";
+  response += "current_ma=";
+  response += String(latestIna226Sample.currentMa, 3);
+  response += "\n";
+  response += "power_mw=";
+  response += String(latestIna226Sample.powerMw, 3);
+  response += "\n";
+  response += "charge_mah=";
+  response += String(accumulatedChargeMah, 6);
+  response += "\n";
+  response += "energy_mwh=";
+  response += String(accumulatedEnergyMwh, 6);
+  response += "\n";
+  response += "battery_voltage_v=";
+  response += String(lastBatteryVoltageV, 3);
+  response += "\n";
+  return response;
+}
+
+void handleMeasurementsRequest() {
+  server.send(200, "text/plain; charset=utf-8", buildMeasurementResponse());
+}
+
+void beginHttpServer() {
+  if (httpServerStarted || WiFi.status() != WL_CONNECTED) {
+    return;
+  }
+
+  server.begin();
+  httpServerStarted = true;
+  Serial.print("HTTP server ready at http://");
+  Serial.println(WiFi.localIP());
+}
+
+void startWifiConnection() {
+  WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
+  WiFi.persistent(false);
+  WiFi.begin(kWifiSsid, kWifiPassword);
+  lastWifiConnectAttemptMs = millis();
+
+  Serial.print("Connecting to WiFi SSID ");
+  Serial.println(kWifiSsid);
+}
+
+void maintainWifiConnection() {
+  if (WiFi.status() == WL_CONNECTED) {
+    beginHttpServer();
+    return;
+  }
+
+  if ((millis() - lastWifiConnectAttemptMs) >= kWifiReconnectIntervalMs) {
+    startWifiConnection();
+  }
 }
 
 void showDisplayMessage(const char* line1, const char* line2 = nullptr) {
@@ -226,6 +312,11 @@ void renderMeasurementScreen(const Ina226Sample& sample) {
   display.print(sample.currentMa, 3);
   display.println(" mA");
 
+  if (WiFi.status() == WL_CONNECTED) {
+    display.setCursor(kDisplayWidth - 12, kDisplayHeight - 8);
+    display.print('W');
+  }
+
   display.setCursor(kDisplayWidth - 6, kDisplayHeight - 8);
   display.print(kReadoutSpinnerChars[readoutSpinnerIndex]);
 
@@ -282,6 +373,10 @@ void setup() {
     Serial.println("SSD1315 init failed");
   }
 
+  server.on("/", handleMeasurementsRequest);
+  server.on("/metrics", handleMeasurementsRequest);
+  startWifiConnection();
+
   ina226Ready = ina226.begin();
   if (ina226Ready) {
     if (!ina226.setAverage(INA226_1024_SAMPLES)) {
@@ -296,6 +391,7 @@ void setup() {
         Ina226Sample sample = {};
         if (readIna226Sample(sample)) {
           integrateIna226Sample(sample);
+          updateLatestMeasurement(sample);
           logIna226Readings(sample);
           advanceReadoutSpinner();
           renderMeasurementScreen(sample);
@@ -324,10 +420,16 @@ void setup() {
 }
 
 void loop() {
+  maintainWifiConnection();
+  if (httpServerStarted) {
+    server.handleClient();
+  }
+
   if (ina226Ready && (millis() - lastIna226PollMs) >= kIna226SampleIntervalMs) {
     Ina226Sample sample = {};
     if (readIna226Sample(sample)) {
       integrateIna226Sample(sample);
+      updateLatestMeasurement(sample);
       logIna226Readings(sample);
       advanceReadoutSpinner();
       renderMeasurementScreen(sample);
