@@ -5,11 +5,13 @@
 namespace coulmeter {
 
 DisplayUi::DisplayUi()
-    : display_(kDisplayWidth, kDisplayHeight, &Wire, kDisplayResetPin) {
+    : display_(U8G2_R0, kDisplayResetPin) {
 }
 
 bool DisplayUi::begin() {
-  ready_ = display_.begin(SSD1306_SWITCHCAPVCC, kDisplayI2cAddress);
+  display_.setI2CAddress(kDisplayI2cAddress << 1);
+  display_.begin();
+  ready_ = true;
   return ready_;
 }
 
@@ -18,8 +20,8 @@ void DisplayUi::clear() {
     return;
   }
 
-  display_.clearDisplay();
-  display_.display();
+  display_.clearBuffer();
+  display_.sendBuffer();
 }
 
 void DisplayUi::showBootSplash() {
@@ -30,31 +32,15 @@ void DisplayUi::showBootSplash() {
   constexpr char kTitle[] = "coul-o-meter";
   constexpr char kSubtitle[] = "bkralik.cz";
 
-  display_.clearDisplay();
-  display_.setTextColor(SSD1306_WHITE);
+  display_.clearBuffer();
 
-  int16_t x1 = 0;
-  int16_t y1 = 0;
-  uint16_t textWidth = 0;
-  uint16_t textHeight = 0;
+  display_.setFont(u8g2_font_6x12_tf);
+  display_.drawStr(centeredX(display_, kTitle), 26, kTitle);
 
-  display_.setTextSize(1);
-  display_.getTextBounds(kTitle, 0, 0, &x1, &y1, &textWidth, &textHeight);
-  const int16_t titleX =
-      (kDisplayWidth - static_cast<int16_t>(textWidth)) / 2;
+  display_.setFont(u8g2_font_5x8_tf);
+  display_.drawStr(centeredX(display_, kSubtitle), 40, kSubtitle);
 
-  display_.getTextBounds(kSubtitle, 0, 0, &x1, &y1, &textWidth, &textHeight);
-  const int16_t subtitleX =
-      (kDisplayWidth - static_cast<int16_t>(textWidth)) / 2;
-
-  display_.setTextSize(1);
-  display_.setCursor(titleX, 22);
-  display_.print(kTitle);
-
-  display_.setTextSize(1);
-  display_.setCursor(subtitleX, 36);
-  display_.print(kSubtitle);
-  display_.display();
+  display_.sendBuffer();
 }
 
 void DisplayUi::showMessage(const char* line1, const char* line2) {
@@ -62,18 +48,15 @@ void DisplayUi::showMessage(const char* line1, const char* line2) {
     return;
   }
 
-  display_.clearDisplay();
-  display_.setTextColor(SSD1306_WHITE);
-  display_.setTextSize(1);
-  display_.setCursor(0, 16);
-  display_.println(line1);
+  display_.clearBuffer();
+  display_.setFont(u8g2_font_6x12_tf);
+  display_.drawStr(0, 22, line1);
 
   if (line2 != nullptr) {
-    display_.setCursor(0, 32);
-    display_.println(line2);
+    display_.drawStr(0, 38, line2);
   }
 
-  display_.display();
+  display_.sendBuffer();
 }
 
 void DisplayUi::renderMeasurementScreen(
@@ -94,39 +77,26 @@ void DisplayUi::renderMeasurementScreen(
   formatDisplayQuantity('E', energyMwh, "mWh", "Wh", energyLine, sizeof(energyLine));
   snprintf(batteryLine, sizeof(batteryLine), "B%.2fV", batteryVoltageV);
 
-  display_.clearDisplay();
-  display_.setTextColor(SSD1306_WHITE);
-  display_.setTextSize(2);
+  char voltageLine[18];
+  char currentLine[18];
+  char spinnerText[2] = {kReadoutSpinnerChars[spinnerIndex], '\0'};
 
-  display_.setCursor(0, 0);
-  display_.println(chargeLine);
+  snprintf(voltageLine, sizeof(voltageLine), "V %.3f V", sample.busVoltageV);
+  snprintf(currentLine, sizeof(currentLine), "I %.3f mA", sample.currentMa);
 
-  display_.setCursor(0, 18);
-  display_.println(energyLine);
+  display_.clearBuffer();
 
-  display_.setTextSize(1);
-  display_.setCursor(0, 40);
-  display_.print("V ");
-  display_.print(sample.busVoltageV, 3);
-  display_.println(" V");
+  display_.setFont(u8g2_font_10x20_mf);
+  display_.drawStr(0, 14, chargeLine);
+  display_.drawStr(0, 31, energyLine);
 
-  int16_t x1 = 0;
-  int16_t y1 = 0;
-  uint16_t textWidth = 0;
-  uint16_t textHeight = 0;
-  display_.getTextBounds(batteryLine, 0, 40, &x1, &y1, &textWidth, &textHeight);
-  display_.setCursor(kDisplayWidth - textWidth, 40);
-  display_.println(batteryLine);
+  display_.setFont(u8g2_font_profont11_mf);
+  display_.drawStr(0, 44, voltageLine);
+  display_.drawStr(kDisplayWidth - display_.getStrWidth(batteryLine), 44, batteryLine);
+  display_.drawStr(0, 56, currentLine);
+  display_.drawStr(kDisplayWidth - display_.getStrWidth(spinnerText), 63, spinnerText);
 
-  display_.setCursor(0, 52);
-  display_.print("I ");
-  display_.print(sample.currentMa, 3);
-  display_.println(" mA");
-
-  display_.setCursor(kDisplayWidth - 6, kDisplayHeight - 8);
-  display_.print(kReadoutSpinnerChars[spinnerIndex]);
-
-  display_.display();
+  display_.sendBuffer();
 }
 
 void DisplayUi::formatDisplayQuantity(
@@ -159,7 +129,11 @@ void DisplayUi::formatDisplayQuantity(
     decimals = 0;
   }
 
-  snprintf(output, outputSize, "%c%.*f%s", prefix, decimals, displayValue, unit);
+  snprintf(output, outputSize, "%c %.*f%s", prefix, decimals, displayValue, unit);
+}
+
+int DisplayUi::centeredX(U8G2& display, const char* text) {
+  return (kDisplayWidth - display.getStrWidth(text)) / 2;
 }
 
 }  // namespace coulmeter

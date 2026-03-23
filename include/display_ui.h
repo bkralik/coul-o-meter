@@ -1,7 +1,6 @@
 #pragma once
 
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
+#include <U8g2lib.h>
 
 #include "coulmeter_config.h"
 
@@ -31,7 +30,9 @@ class DisplayUi {
       char* output,
       size_t outputSize);
 
-  Adafruit_SSD1306 display_;
+  static int centeredX(U8G2& display, const char* text);
+
+  U8G2_SSD1306_128X64_NONAME_F_HW_I2C display_;
   bool ready_ = false;
 };
 
