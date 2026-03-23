@@ -27,21 +27,33 @@ void DisplayUi::showBootSplash() {
     return;
   }
 
+  constexpr char kTitle[] = "coul-o-meter";
+  constexpr char kSubtitle[] = "bkralik.cz";
+
   display_.clearDisplay();
-  display_.setTextSize(2);
   display_.setTextColor(SSD1306_WHITE);
 
   int16_t x1 = 0;
   int16_t y1 = 0;
   uint16_t textWidth = 0;
   uint16_t textHeight = 0;
-  display_.getTextBounds("coulmeter", 0, 0, &x1, &y1, &textWidth, &textHeight);
 
-  const int16_t x = (kDisplayWidth - static_cast<int16_t>(textWidth)) / 2;
-  const int16_t y = (kDisplayHeight - static_cast<int16_t>(textHeight)) / 2;
+  display_.setTextSize(1);
+  display_.getTextBounds(kTitle, 0, 0, &x1, &y1, &textWidth, &textHeight);
+  const int16_t titleX =
+      (kDisplayWidth - static_cast<int16_t>(textWidth)) / 2;
 
-  display_.setCursor(x, y);
-  display_.print("coulmeter");
+  display_.getTextBounds(kSubtitle, 0, 0, &x1, &y1, &textWidth, &textHeight);
+  const int16_t subtitleX =
+      (kDisplayWidth - static_cast<int16_t>(textWidth)) / 2;
+
+  display_.setTextSize(1);
+  display_.setCursor(titleX, 22);
+  display_.print(kTitle);
+
+  display_.setTextSize(1);
+  display_.setCursor(subtitleX, 36);
+  display_.print(kSubtitle);
   display_.display();
 }
 
