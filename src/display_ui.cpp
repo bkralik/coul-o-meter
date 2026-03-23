@@ -34,10 +34,10 @@ void DisplayUi::showBootSplash() {
 
   display_.clearBuffer();
 
-  display_.setFont(u8g2_font_6x12_tf);
+  display_.setFont(u8g2_font_Pixellari_te);
   display_.drawStr(centeredX(display_, kTitle), 26, kTitle);
 
-  display_.setFont(u8g2_font_5x8_tf);
+  display_.setFont(u8g2_font_6x12_tf);
   display_.drawStr(centeredX(display_, kSubtitle), 40, kSubtitle);
 
   display_.sendBuffer();
