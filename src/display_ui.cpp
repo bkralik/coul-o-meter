@@ -79,7 +79,6 @@ void DisplayUi::renderMeasurementScreen(
 
   char voltageLine[18];
   char currentLine[18];
-  char spinnerText[2] = {kReadoutSpinnerChars[spinnerIndex], '\0'};
 
   snprintf(voltageLine, sizeof(voltageLine), "V %.3f V", sample.busVoltageV);
   snprintf(currentLine, sizeof(currentLine), "I %.3f mA", sample.currentMa);
@@ -94,7 +93,33 @@ void DisplayUi::renderMeasurementScreen(
   display_.drawStr(0, 44, voltageLine);
   display_.drawStr(kDisplayWidth - display_.getStrWidth(batteryLine), 44, batteryLine);
   display_.drawStr(0, 56, currentLine);
-  display_.drawStr(kDisplayWidth - display_.getStrWidth(spinnerText), 63, spinnerText);
+
+  const uint8_t spinnerCenterX = kDisplayWidth - 4;
+  const uint8_t spinnerCenterY = kDisplayHeight - 5;
+  switch (spinnerIndex % kReadoutSpinnerFrameCount) {
+    case 0:
+      display_.drawLine(
+          spinnerCenterX - 3, spinnerCenterY, spinnerCenterX + 3, spinnerCenterY);
+      break;
+    case 1:
+      display_.drawLine(
+          spinnerCenterX - 2,
+          spinnerCenterY + 2,
+          spinnerCenterX + 2,
+          spinnerCenterY - 2);
+      break;
+    case 2:
+      display_.drawLine(
+          spinnerCenterX, spinnerCenterY - 3, spinnerCenterX, spinnerCenterY + 3);
+      break;
+    default:
+      display_.drawLine(
+          spinnerCenterX - 2,
+          spinnerCenterY - 2,
+          spinnerCenterX + 2,
+          spinnerCenterY + 2);
+      break;
+  }
 
   display_.sendBuffer();
 }
@@ -129,7 +154,7 @@ void DisplayUi::formatDisplayQuantity(
     decimals = 0;
   }
 
-  snprintf(output, outputSize, "%c %.*f%s", prefix, decimals, displayValue, unit);
+  snprintf(output, outputSize, "%c %.*f %s", prefix, decimals, displayValue, unit);
 }
 
 int DisplayUi::centeredX(U8G2& display, const char* text) {

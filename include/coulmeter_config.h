@@ -28,9 +28,7 @@ constexpr uint32_t kIna226ConversionReadyTimeoutMs = 3000;
 constexpr float kIna226MaxCurrentAmps = 8.0f;
 constexpr float kIna226ShuntOhms = 0.01f;
 
-constexpr char kReadoutSpinnerChars[] = {'-', '/', '|', '\\'};
-constexpr size_t kReadoutSpinnerCharCount =
-    sizeof(kReadoutSpinnerChars) / sizeof(kReadoutSpinnerChars[0]);
+constexpr size_t kReadoutSpinnerFrameCount = 4;
 
 struct Ina226Sample {
   unsigned long timestampMs;

@@ -30,7 +30,7 @@ void logBootStep(const char* message) {
 
 void advanceReadoutSpinner() {
   readoutSpinnerIndex =
-      (readoutSpinnerIndex + 1) % coulmeter::kReadoutSpinnerCharCount;
+      (readoutSpinnerIndex + 1) % coulmeter::kReadoutSpinnerFrameCount;
 }
 
 void logIna226Readings(const Ina226Sample& sample) {
